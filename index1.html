@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE BEST MAXX - Premium</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        :root { --primary: #ffcc00; --bg: #000; --card: #121212; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; overflow-x: hidden; }
+        
+        /* BUSCA E HEADER */
+        header { padding: 20px 5%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #080808; border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 100; }
+        #searchInput { flex: 1; min-width: 250px; padding: 12px 20px; border-radius: 25px; border: 1px solid #333; background: #1a1a1a; color: white; outline: none; }
+        #searchInput:focus { border-color: var(--primary); }
+
+        /* GRID E CARDS */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 20px 5%; }
+        .card { background: var(--card); border-radius: 8px; overflow: hidden; border: 1px solid #222; cursor: pointer; transition: 0.2s; }
+        .card:hover { transform: scale(1.05); border-color: var(--primary); }
+        .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
+        .card div { padding: 8px; font-size: 11px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* PLAYER EM TELA CHEIA (CORREÇÃO DA IMAGEM PEQUENA) */
+        #player-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: none; }
+        video { width: 100%; height: 100%; object-fit: contain; }
+        .back-btn { position: absolute; top: 20px; left: 20px; z-index: 10000; background: var(--primary); border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; color: #000; }
+
+        #loader { position: fixed; top:0; left:0; width:100%; height:100%; background:#000; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:10001; }
+    </style>
+</head>
+<body>
+
+<div id="loader">
+    <div style="border: 4px solid #333; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
+    <p style="margin-top: 15px;">Carregando sua Lista VIP...</p>
+</div>
+
+<header>
+    <div style="font-size: 20px; font-weight: bold; color: var(--primary);">THE BEST MAXX</div>
+    <input type="text" id="searchInput" placeholder="Pesquisar canal ou filme..." onkeyup="filter()">
+</header>
+
+<div class="grid" id="mainGrid"></div>
+
+<div id="player-overlay">
+    <button class="back-btn" onclick="stopPlayer()">⬅ VOLTAR</button>
+    <video id="videoPlayer" controls autoplay></video>
+</div>
+
+<script>
+    let db = [];
+    let hls = null;
+
+    async function loadList() {
+        try {
+            const r = await fetch('./lista.m3u');
+            if (!r.ok) return;
+            const text = await r.text();
+            const lines = text.split('\n');
+            let item = null;
+
+            for (let i = 0; i < lines.length; i++) {
+                let l = lines[i].trim();
+                if (l.startsWith('#EXTINF:')) {
+                    const n = l.split(',')[1] || "Sem Nome";
+                    const g = l.match(/tvg-logo="([^"]+)"/)?.[1] || "";
+                    item = { n, g };
+                } else if (l.startsWith('http')) {
+                    if (item) {
+                        item.u = l;
+                        db.push(item);
+                        item = null;
+                    }
+                }
+            }
+            render();
+            document.getElementById('loader').style.display = 'none';
+        } catch (e) { console.error(e); }
+    }
+
+    function render(f = "") {
+        const grid = document.getElementById('mainGrid');
+        grid.innerHTML = "";
+        const filtered = db.filter(i => i.n.toLowerCase().includes(f.toLowerCase())).slice(0, 100);
+        
+        filtered.forEach(i => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <img src="${i.g}" onerror="this.src='https://via.placeholder.com/300x450/000/333?text=SEM+IMAGEM'">
+                <div>${i.n}</div>
+            `;
+            card.onclick = () => startPlayer(i.u);
+            grid.appendChild(card);
+        });
+    }
+
+    function filter() { render(document.getElementById('searchInput').value); }
+
+    function startPlayer(url) {
+        const overlay = document.getElementById('player-overlay');
+        const video = document.getElementById('videoPlayer');
+        overlay.style.display = 'block';
+
+        if (url.includes('.m3u8')) {
+            if (Hls.isSupported()) {
+                if (hls) hls.destroy();
+                hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(video);
+            }
+        } else { video.src = url; }
+    }
+
+    function stopPlayer() {
+        const v = document.getElementById('videoPlayer');
+        if (hls) hls.destroy();
+        v.pause(); v.src = "";
+        document.getElementById('player-overlay').style.display = 'none';
+    }
+
+    window.onload = loadList;
+</script>
+<style> @keyframes spin { 100% { transform: rotate(360deg); } } </style>
+</body>
+</html>
